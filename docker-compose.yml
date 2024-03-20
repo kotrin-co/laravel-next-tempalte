@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: locker_server
+    volumes:
+      - type: volume
+        source: php-fpm-socket
+        target: /var/run/php-fpm
+        volume:
+          nocopy: true
+      - type: bind
+        source: ./backend
+        target: /backend
+      - type: volume
+        source: psysh-store
+        target: /root/.config/psysh
+        volume:
+          nocopy: true
+    depends_on:
+      - db
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    container_name: locker_web
+    ports:
+      - 80:80
+      - 9000:9000
+    volumes:
+      - type: volume
+        source: php-fpm-socket
+        target: /var/run/php-fpm
+        volume:
+          nocopy: true
+      - type: bind
+        source: ./backend
+        target: /backend
+    depends_on:
+      - server
+
+  front:
+    build:
+      context: .
+      dockerfile: docker/front/Dockerfile
+    container_name: locker_front
+    volumes:
+      - ./frontend:/var/www/html
+      - nuxt_node_modules:/var/www/html/node_modules
+    ports:
+      - 3007:3000
+      - 24678:24678
+    tty: true
+    environment:
+      - HOST=0.0.0.0
+      - CHOKIDAR_USEPOLLING=true
+    command: sh -c "yarn && yarn dev"
+
+  db:
+    image: mysql:8.0
+    container_name: locker_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: locker_db
+      MYSQL_USER: locker_admin
+      MYSQL_PASSWORD: locker_local
+      TZ: "Asia/Tokyo"
+    ports:
+      - 3309:3306
+    volumes:
+      - ./docker/mysql/data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/mysql/sql:/docker-entrypoint-initdb.d
+
+  mail:
+    image: mailhog/mailhog
+    ports:
+      - 8025:8025
+
+volumes:
+  nuxt_node_modules:
+  db-store:
+  php-fpm-socket:
+  psysh-store:
