@@ -1,30 +1,47 @@
-FROM php:8.2-fpm 
-SHELL ["/bin/bash", "-oeux", "pipefail", "-c"]
+FROM php:8.2-fpm-alpine
 
-# timezone environment
-ENV TZ=UTC \
-    # locale
-    LANG=en_US.UTF-8 \
-    LANGUAGE=en_US:en \
-    LC_ALL=en_US.UTF-8 \
-    # composer environment
-    COMPOSER_ALLOW_SUPERUSER=1 \
-    COMPOSER_HOME=/composer
+ARG UID
+ARG GID
 
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+ENV UID=${UID}
+ENV GID=${GID}
 
-RUN apt-get update && \
-    apt-get -y install git libicu-dev libonig-dev libzip-dev unzip locales && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    locale-gen en_US.UTF-8 && \
-    localedef -f UTF-8 -i en_US en_US.UTF-8 && \
-    mkdir /var/run/php-fpm && \
-    docker-php-ext-install intl pdo_mysql zip bcmath && \
-    composer config -g process-timeout 3600 && \
-    composer config -g repos.packagist composer https://packagist.org
+RUN mkdir -p /var/www
 
-COPY ./docker/php/php-fpm.d/zzz-www.conf /usr/local/etc/php-fpm.d/zzz-www.conf
-COPY ./docker/php/php.ini /usr/local/etc/php/php.ini
+WORKDIR /var/www
 
-WORKDIR /backend
+COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+
+# MacOS staff group's gid is 20, so is the dialout group in alpine linux. We're not using it, let's just remove it.
+RUN delgroup dialout
+
+RUN addgroup -g ${GID} --system laravel
+RUN adduser -G laravel --system -D -s /bin/sh -u ${UID} laravel
+
+RUN sed -i "s/user = www-data/user = laravel/g" /usr/local/etc/php-fpm.d/www.conf
+RUN sed -i "s/group = www-data/group = laravel/g" /usr/local/etc/php-fpm.d/www.conf
+RUN echo "php_admin_flag[log_errors] = on" >> /usr/local/etc/php-fpm.d/www.conf
+
+COPY php.ini /usr/local/etc/php/conf.d/
+
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+RUN install-php-extensions sockets
+
+RUN apk add --no-cache --virtual build-essentials \
+    icu-dev icu-libs zlib-dev jpeg-dev g++ make automake autoconf libzip-dev imagemagick-dev \
+    libpng-dev libwebp-dev libjpeg-turbo-dev freetype-dev && \
+    docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp && \
+    pecl install imagick && \
+    docker-php-ext-install pdo pdo_mysql gd intl opcache exif zip && \
+    docker-php-ext-enable imagick
+
+RUN mkdir -p /usr/src/php/ext/redis \
+    && curl -L https://github.com/phpredis/phpredis/archive/5.3.4.tar.gz | tar xvz -C /usr/src/php/ext/redis --strip 1 \
+    && echo 'redis' >> /usr/src/php-available-exts \
+    && docker-php-ext-install redis
+
+RUN docker-php-ext-install gd
+
+USER laravel
+
+CMD ["php-fpm", "-y", "/usr/local/etc/php-fpm.conf", "-R"]

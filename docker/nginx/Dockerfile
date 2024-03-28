@@ -1,19 +1,16 @@
-FROM node:20-alpine as node
-FROM nginx:1.25-alpine
-SHELL ["/bin/ash", "-oeux", "pipefail", "-c"]
+FROM nginx:1.25.4-alpine
 
-ENV TZ=UTC
+ARG UID
+ARG GID
 
-RUN apk update && \
-  apk add --update --no-cache --virtual=.build-dependencies g++
+ENV UID=${UID}
+ENV GID=${GID}
 
-# node command
-COPY --from=node /usr/local/bin /usr/local/bin
-# npm command
-COPY --from=node /usr/local/lib /usr/local/lib
-# yarn command
-COPY --from=node /opt /opt
-# nginx config file
-COPY ./docker/nginx/*.conf /etc/nginx/conf.d/
+# MacOS staff group's gid is 20, so is the dialout group in alpine linux. We're not using it, let's just remove it.
+RUN delgroup dialout
 
-WORKDIR /backend
+RUN addgroup -g ${GID} --system laravel
+RUN adduser -G laravel --system -D -s /bin/sh -u ${UID} laravel
+RUN sed -i "s/user  nginx/user laravel/g" /etc/nginx/nginx.conf
+
+RUN mkdir -p /var/www

@@ -1,56 +1,45 @@
 version: "3.9"
 
 services:
-  server:
-    build:
-      context: .
-      dockerfile: docker/php/Dockerfile
-    container_name: locker_server
-    volumes:
-      - type: volume
-        source: php-fpm-socket
-        target: /var/run/php-fpm
-        volume:
-          nocopy: true
-      - type: bind
-        source: ./backend
-        target: /backend
-      - type: volume
-        source: psysh-store
-        target: /root/.config/psysh
-        volume:
-          nocopy: true
-    depends_on:
-      - db
-
   web:
+    container_name: "sangacio-web"
     build:
-      context: .
-      dockerfile: docker/nginx/Dockerfile
-    container_name: locker_web
+      context: ./docker/nginx
+      dockerfile: Dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
     ports:
-      - 80:80
+      - "80:80"
+    volumes:
+      - ./backend:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php
+      - mysql
+      - mailhog
+      - redis
+
+  php:
+    container_name: "sangacio-php"
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    ports:
       - 9000:9000
     volumes:
-      - type: volume
-        source: php-fpm-socket
-        target: /var/run/php-fpm
-        volume:
-          nocopy: true
-      - type: bind
-        source: ./backend
-        target: /backend
-    depends_on:
-      - server
+      - ./backend:/var/www
 
   front:
     build:
-      context: .
-      dockerfile: docker/front/Dockerfile
-    container_name: locker_front
+      context: ./docker/front
+      dockerfile: Dockerfile
+    container_name: "sangacio-front"
     volumes:
       - ./frontend:/var/www/html
-      - nuxt_node_modules:/var/www/html/node_modules
     ports:
       - 3007:3000
       - 24678:24678
@@ -60,29 +49,33 @@ services:
       - CHOKIDAR_USEPOLLING=true
     command: sh -c "yarn && yarn dev"
 
-  db:
+  mysql:
     image: mysql:8.0
-    container_name: locker_db
+    container_name: "sangacio-mysql"
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: locker_db
-      MYSQL_USER: locker_admin
-      MYSQL_PASSWORD: locker_local
+      MYSQL_DATABASE: sangacio_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: secret
       TZ: "Asia/Tokyo"
     ports:
       - 3309:3306
     volumes:
-      - ./docker/mysql/data:/var/lib/mysql
+      - ./tmp/db:/var/lib/mysql
       - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
       - ./docker/mysql/sql:/docker-entrypoint-initdb.d
 
-  mail:
+  mailhog:
     image: mailhog/mailhog
+    container_name: "sangacio-mailhog"
     ports:
       - 8025:8025
 
-volumes:
-  nuxt_node_modules:
-  db-store:
-  php-fpm-socket:
-  psysh-store:
+  redis:
+    image: redis:latest
+    container_name: "sangacio-redis"
+    ports:
+      - 6379:6379
+    volumes:
+      - ./tmp/redis:/data
+      - ./docker/redis/redis.conf:/etc/redis.conf
