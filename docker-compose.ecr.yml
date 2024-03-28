@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  web:
+    container_name: "sangacio-web-prod"
+    build:
+      context: .
+      dockerfile: ecrDocker/nginx.Dockerfile
+    ports:
+      - 80:80
+    depends_on:
+      - php
+
+  php:
+    container_name: "sangacio-php-prod"
+    build:
+      context: .
+      dockerfile: ecrDocker/php.Dockerfile
