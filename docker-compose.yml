@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   web:
-    container_name: "sangacio-web"
+    container_name: locker-web
     build:
       context: ./docker/nginx
       dockerfile: Dockerfile
@@ -21,7 +21,7 @@ services:
       - redis
 
   php:
-    container_name: "sangacio-php"
+    container_name: locker-php
     build:
       context: ./docker/php
       dockerfile: Dockerfile
@@ -37,24 +37,22 @@ services:
     build:
       context: ./docker/front
       dockerfile: Dockerfile
-    container_name: "sangacio-front"
+    container_name: locker-front
     volumes:
       - ./frontend:/var/www/html
+    environment:
+      - WATCHPACK_POLLING=true
     ports:
       - 3007:3000
-      - 24678:24678
     tty: true
-    environment:
-      - HOST=0.0.0.0
-      - CHOKIDAR_USEPOLLING=true
-    command: sh -c "yarn && yarn dev"
+    command: sh -c "yarn & yarn dev"
 
   mysql:
     image: mysql:8.0
-    container_name: "sangacio-mysql"
+    container_name: locker-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: sangacio_db
+      MYSQL_DATABASE: locker_db
       MYSQL_USER: user
       MYSQL_PASSWORD: secret
       TZ: "Asia/Tokyo"
@@ -67,13 +65,13 @@ services:
 
   mailhog:
     image: mailhog/mailhog
-    container_name: "sangacio-mailhog"
+    container_name: locker-mailhog
     ports:
       - 8025:8025
 
   redis:
     image: redis:latest
-    container_name: "sangacio-redis"
+    container_name: locker-redis
     ports:
       - 6379:6379
     volumes:
